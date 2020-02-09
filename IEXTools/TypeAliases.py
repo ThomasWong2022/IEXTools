@@ -12,4 +12,7 @@ AllMessages = Union[
     messages.TradingStatus,
     messages.OperationalHalt,
     messages.QuoteUpdate,
+    messages.BidUpdate,
+    messages.AskUpdate,
+    messages.SecurityEvent,
 ]

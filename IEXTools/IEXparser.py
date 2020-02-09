@@ -58,6 +58,7 @@ class Parser(object):
         tops: bool = True,
         deep: bool = False,
         tops_version: float = 1.6,
+        deep_version: float = 1.0,
     ) -> None:
         self.file_path = file_path
         self.tops = tops
@@ -73,8 +74,9 @@ class Parser(object):
             protcol_ids = {1.5: b"\x02\x80", 1.6: b"\x03\x80"}
             self.protocol_id = protcol_ids[tops_version]
         elif deep:
-            self.protocol_id = b"\x04\x80"
-            raise NotImplementedError("Parsing of DEEP files not implemented")
+            protocol_ids = {1.0: b"\x04\x80" }
+            self.protocol_id = protcol_ids[deep_version]
+            # raise NotImplementedError("Parsing of DEEP files not implemented")
         elif deep and tops:
             raise ValueError('"deep" and "tops" arguments cannot both be true')
         self.channel_id = b"\x01\x00\x00\x00"
@@ -100,9 +102,15 @@ class Parser(object):
             messages.TradingStatus: b"\x48",
             messages.OperationalHalt: b"\x4f",
             messages.QuoteUpdate: b"\x51",
+            messages.BidUpdate: b"\x38",
+            messages.AskUpdate: b"\x35",
+            messages.SecurityEvent: b"\x45",
         }
 
-        self.decoder = messages.MessageDecoder(version=tops_version)
+        if tops:
+            self.decoder = messages.MessageDecoder(version=tops_version)
+        else:
+            self.decoder = messages.MessageDecoder(version=deep_version)
 
     def __repr__(self) -> str:
         return f'Parser("{self.file_path}", tops={self.tops}, deep={self.deep})'
@@ -267,6 +275,8 @@ class Parser(object):
             self._seek_header()
 
         self._read_next_message()
+
+        
         while allowed is not None and self.message_type not in allowed_types:
             while not self.messages_left:
                 self._seek_header()

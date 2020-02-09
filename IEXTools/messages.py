@@ -116,6 +116,72 @@ class MessageDecoder(object):
                     "cls": TradeBreak,
                     "fmt": "<1sq8sqqxxxx",
                 },
+            1.0: {
+                b"\x53": {
+                    "str": "System Event Message",
+                    "cls": SystemEvent,
+                    "fmt": "<Bq",
+                },
+                b"\x44": {
+                    "str": "Security Directory Message",
+                    "cls": SecurityDirective,
+                    "fmt": "<Bq8sLqB",
+                },
+                b"\x48": {
+                    "str": "Trading Status Message",
+                    "cls": TradingStatus,
+                    "fmt": "<1sq8s4s",
+                },
+                b"\x4f": {
+                    "str": "Operational Halt Status Message",
+                    "cls": OperationalHalt,
+                    "fmt": "<1sq8s",
+                },
+                b"\x50": {
+                    "str": "Short Sale Price Test Status Message",
+                    "cls": ShortSalePriceSale,
+                    "fmt": "<Bq8s1s",
+                },
+                b"\x51": {
+                    "str": "Quote Update Message",
+                    "cls": QuoteUpdate,
+                    "fmt": "<Bq8sLqqL",
+                },
+                b"\x54": {
+                    "str": "Trade Report Message",
+                    "cls": TradeReport,
+                    "fmt": "<Bq8sLqq",
+                },
+                b"\x58": {
+                    "str": "Official Price Message",
+                    "cls": OfficialPrice,
+                    "fmt": "<1sq8sq",
+                },
+                b"\x42": {
+                    "str": "Trade Break Message",
+                    "cls": TradeBreak,
+                    "fmt": "<1sq8sLqq",
+                },
+                b"\x41": {
+                    "str": "Auction Information Message",
+                    "cls": AuctionInformation,
+                    "fmt": "<1sq8sLqqL1sBLqqqq",
+                },
+                b"\x38": {
+                "str": "Bid Update Message",
+                "cls": BidUpdate,
+                "fmt": "<Bq8sLq",
+                },
+                b"\x35": {
+                    "str": "Ask Update Message",
+                    "cls": AskUpdate,
+                    "fmt": "<Bq8sLq",
+                },
+                b"\x45": {
+                    "str": "Security Event Message",
+                    "cls": SecurityEvent,
+                    "fmt": "<1sq8s",
+                },  
             },
         }
         self.DECODE_FMT: Dict[int, str] = {
@@ -415,6 +481,62 @@ class AuctionInformation(Message):
     upper_auction_collar_price_int: int  # 8 bytes
 
 
+@dataclass
+class BidUpdate(Message):
+    """
+    From the DEEP specification document
+    """
+
+    __slots__ = (
+        "flags",
+        "timestamp",
+        "symbol",
+        "size",
+        "price_int",
+        "price",
+    )
+    flags: int  # 1 byte
+    timestamp: int  # 8 bytes
+    symbol: str  # 8 bytes
+    size: int  # 4 bytes 
+    price_int: int  # 8 bytes     
+
+
+@dataclass
+class AskUpdate(Message):
+    """
+    From the DEEP specification document
+    """
+    
+    __slots__ = (
+        "flags",
+        "timestamp",
+        "symbol",
+        "size",
+        "price_int",
+        "price",
+    )
+    flags: int  # 1 byte
+    timestamp: int  # 8 bytes
+    symbol: str  # 8 bytes
+    size: int  # 4 bytes 
+    price_int: int  # 8 bytes 
+
+@dataclass
+class SecurityEvent(Message):
+    """
+    From the DEEPS 
+    """
+    __slots__ = ("security_event", "timestamp", "symbol", "security_event_str",)
+    security_event: str  # 1 byte
+    timestamp: int  # 8 bytes
+    symbol: str  # 8 bytes
+
+    def __post_init__(self):
+        Message.__post_init__(self)
+        self.security_event_str = security_event_types[self.security_event]
+
+
 AllMessages = Union[
     ShortSalePriceSale,
     TradeBreak,
@@ -426,4 +548,8 @@ AllMessages = Union[
     TradingStatus,
     OperationalHalt,
     QuoteUpdate,
+    BidUpdate,
+    AskUpdate,
+    SecurityEvent,
 ]
+
