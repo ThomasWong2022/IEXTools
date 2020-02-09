@@ -116,6 +116,7 @@ class MessageDecoder(object):
                     "cls": TradeBreak,
                     "fmt": "<1sq8sqqxxxx",
                 },
+            },
             1.0: {
                 b"\x53": {
                     "str": "System Event Message",
@@ -168,9 +169,9 @@ class MessageDecoder(object):
                     "fmt": "<1sq8sLqqL1sBLqqqq",
                 },
                 b"\x38": {
-                "str": "Bid Update Message",
-                "cls": BidUpdate,
-                "fmt": "<Bq8sLq",
+                    "str": "Bid Update Message",
+                    "cls": BidUpdate,
+                    "fmt": "<Bq8sLq",
                 },
                 b"\x35": {
                     "str": "Ask Update Message",
@@ -184,6 +185,7 @@ class MessageDecoder(object):
                 },  
             },
         }
+
         self.DECODE_FMT: Dict[int, str] = {
             msg[0]: self.message_types[version][msg]["fmt"]
             for msg in self.message_types[version]
