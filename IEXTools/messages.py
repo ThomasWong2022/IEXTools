@@ -16,6 +16,24 @@ from .IEXHISTExceptions import ProtocolException
 # Debating whether this should just be a class variable of SystemEvent. I'm
 # afraid that placing it in the class will create a copy of this dict for every
 # instance of SystemEvent.
+
+message_category_map = {
+    'S': 'System Event',
+    'D': 'Security Directory',
+    'H': 'Trading Status',
+    'O': 'Operational Halt Status',
+    'P': 'Short Sale Price Test Status',
+    'Q': 'Quote Update',
+    'T': 'Trade Report',
+    'X': 'Official Price',
+    'B': 'Trade Break',
+    'A': 'Auction Information',
+    'E': 'Security Event',
+    '8': 'Bid Price Level Update',
+    '5': 'Ask Price Level Update',
+}
+
+
 system_event_types = {
     79: "start_of_messages",
     83: "start_of_system_hours",
@@ -24,7 +42,10 @@ system_event_types = {
     69: "end_of_system_hours",
     77: "end_of_regular_hours",
 }
-
+security_event_types = {
+    'O': 'Opening Process Complete',
+    'C': 'Closing Process Complete',
+}
 trading_status_messages = {
     "H": "Trading halted across all US equity markets",
     "O": "Trading halt released into an Order Acceptance Period on IEX "
@@ -34,6 +55,10 @@ trading_status_messages = {
     "T": "Trading on IEX",
 }
 
+Bid_Ask_flag = {
+    0: 'Order Book is in transition',
+    1: 'Order Book transition complete',
+}
 
 class MessageDecoder(object):
     def __init__(self) -> None:
@@ -50,52 +75,80 @@ class MessageDecoder(object):
                 "str": "System Event Message",
                 "cls": SystemEvent,
                 "fmt": "<Bq",
+                "len": 9,
             },
             b"\x44": {
                 "str": "Security Directory Message",
                 "cls": SecurityDirective,
                 "fmt": "<Bq8sLqB",
+                "len": 30,
             },
             b"\x48": {
                 "str": "Trading Status Message",
                 "cls": TradingStatus,
                 "fmt": "<1sq8s4s",
+                "len": 21,
             },
             b"\x4f": {
                 "str": "Operational Halt Status Message",
                 "cls": OperationalHalt,
                 "fmt": "<1sq8s",
+                "len": 17,
             },
             b"\x50": {
                 "str": "Short Sale Price Test Status Message",
                 "cls": ShortSalePriceSale,
                 "fmt": "<Bq8s1s",
+                "len": 18,
             },
             b"\x51": {
                 "str": "Quote Update Message",
                 "cls": QuoteUpdate,
                 "fmt": "<Bq8sLqqL",
+                "len": 41,
             },
             b"\x54": {
                 "str": "Trade Report Message",
                 "cls": TradeReport,
                 "fmt": "<Bq8sLqq",
+                "len": 37,
             },
             b"\x58": {
                 "str": "Official Price Message",
                 "cls": OfficialPrice,
                 "fmt": "<1sq8sq",
+                "len": 25,
             },
             b"\x42": {
                 "str": "Trade Break Message",
                 "cls": TradeBreak,
                 "fmt": "<1sq8sqq",
+                "len": 37,
             },
             b"\x41": {
                 "str": "Auction Information Message",
                 "cls": AuctionInformation,
                 "fmt": "<1sq8sLqqL1sBLqqqq",
+                "len": 29,
             },
+            b"\x38": {
+                "str": "Bid Update Message",
+                "cls": BidUpdate,
+                "fmt": "<Bq8sLq",
+                "len": 29,
+            },
+            b"\x35": {
+                "str": "Ask Update Message",
+                "cls": AskUpdate,
+                "fmt": "<Bq8sLq",
+                "len": 29,
+            },
+            b"\x45": {
+                "str": "Security Event Message",
+                "cls": SecurityEvent,
+                "fmt": "<1sq8s",
+                "len": 17,
+            },    
         }
         self.DECODE_FMT: Dict[int, str] = {
             msg[0]: self.message_types[msg]["fmt"] for msg in self.message_types
@@ -103,16 +156,26 @@ class MessageDecoder(object):
         self.MSG_CLS: Dict[int, Type[AllMessages]] = {
             msg[0]: self.message_types[msg]["cls"] for msg in self.message_types
         }
+        self.MSG_LEN: Dict[int, int] = {
+            msg[0]: self.message_types[msg]["len"] for msg in self.message_types
+        }
 
     def decode_message(self, msg_type: int, binary_msg: bytes) -> AllMessages:
         try:
             fmt = self.DECODE_FMT[msg_type]
         except KeyError as e:
             raise ProtocolException(f'Unknown message type: {e.args}')
-        decoded_msg = struct.unpack(fmt, binary_msg)
-        msg = self.MSG_CLS[msg_type](*decoded_msg)
-        return msg
-
+        try:
+            decoded_msg = struct.unpack(fmt, binary_msg)
+            msg = self.MSG_CLS[msg_type](*decoded_msg)
+            return msg, None
+        except:
+            # For TOPS1.5 version need to remove reserved bytes 
+            reserved=self.MSG_LEN[msg_type]-len(binary_msg)
+            exp_binary_msg=binary_msg[:reserved]
+            decoded_msg = struct.unpack(fmt, exp_binary_msg)
+            msg = self.MSG_CLS[msg_type](*decoded_msg)
+            return msg, binary_msg[reserved:]
 
 @dataclass
 class Message(object):
@@ -130,7 +193,7 @@ class Message(object):
         self.date_time = datetime.fromtimestamp(
             self.timestamp / 10 ** 9, tz=timezone.utc
         )
-        str_fields = "symbol", "status", "reason", "detail", "halt_status"
+        str_fields = [ "symbol", "status", "reason", "detail", "halt_status", "security_event"]
         for attrib in str_fields:
             if hasattr(self, attrib):
                 if isinstance(getattr(self, attrib), bytes):
@@ -145,6 +208,16 @@ class Message(object):
         for int_price in int_prices:
             attrib = int_price.split("_int")[0]
             setattr(self, attrib, getattr(self, int_price) / 10 ** 4)
+            delattr(self, int_price)
+
+    def todict(self):
+        output={}
+        for i in self.__slots__:
+            try:
+                output[i]=getattr(self,i)
+            except:
+                continue
+        return output
 
 
 @dataclass
@@ -159,6 +232,7 @@ class SystemEvent(Message):
     __slots__ = ("system_event", "timestamp", "system_event_str")
     system_event: int  # 1 byte
     timestamp: int  # 8 bytes
+ 
 
     def __post_init__(self):
         Message.__post_init__(self)
@@ -179,15 +253,15 @@ class SecurityDirective(Message):
         "timestamp",
         "symbol",
         "round_lot_size",
-        "adjusted_poc_close",
+        "adjusted_poc_price_int",
         "luld_tire",
-        "price",
+        "adjusted_poc_price",
     )
     flags: int  # 1 byte
     timestamp: int  # 8 bytes
     symbol: str  # 8 bytes
     round_lot_size: int  # 4 bytes
-    adjusted_poc_close: int  # 8 bytes
+    adjusted_poc_price_int: int  # 8 bytes
     luld_tire: int  # 1 byte
 
 
@@ -224,6 +298,7 @@ class TradingStatus(Message):
     symbol: str  # 8 bytes
     reason: str  # 4 bytes
 
+
     def __post_init__(self):
         Message.__post_init__(self)
         self.trading_status_message = trading_status_messages[self.status]
@@ -237,7 +312,7 @@ class OperationalHalt(Message):
     operational halt using the Operational Halt Status Message."
     """
 
-    __slots__ = ("halt_status", "timestamp", "symbol")
+    __slots__ = ("halt_status", "timestamp", "symbol",)
     halt_status: str  # 1 byte
     timestamp: int  # 8 bytes
     symbol: str  # 8 bytes
@@ -251,7 +326,7 @@ class ShortSalePriceSale(Message):
     a short sale price test restriction is in effect for a security."
     """
 
-    __slots__ = ("short_sale_status", "timestamp", "symbol", "detail")
+    __slots__ = ("short_sale_status", "timestamp", "symbol", "detail" ,)
     short_sale_status: int  # 1 byte
     timestamp: int  # 8 bytes
     symbol: str  # 8 bytes
@@ -285,7 +360,6 @@ class QuoteUpdate(Message):
     ask_price_int: int  # 8 bytes - Best quoted ask price
     ask_size: int  # 4 bytes  - Aggregate quoted best ask size
 
-
 @dataclass
 class TradeReport(Message):
     """
@@ -310,7 +384,6 @@ class TradeReport(Message):
     price_int: int  # 8 bytes - Trade price
     trade_id: int  # 8 bytes - Trade ID, unique within the day
 
-
 @dataclass
 class OfficialPrice(Message):
     """
@@ -319,7 +392,7 @@ class OfficialPrice(Message):
     Official Closing Price."
     """
 
-    __slots__ = ("price_type", "timestamp", "symbol", "price_int", "price")
+    __slots__ = ("price_type", "timestamp", "symbol", "price_int", "price",)
     price_type: str  # 1 byte
     timestamp: int  # 8 byte
     symbol: str  # 8 bytes
@@ -334,7 +407,7 @@ class TradeBreak(Message):
     rare and only affect applications that rely upon IEX execution based data."
     """
 
-    __slots__ = ("price_type", "timestamp", "symbol", "price_int", "price")
+    __slots__ = ("price_type", "timestamp", "symbol", "price_int", "price",)
     price_type: str  # 1 byte
     timestamp: int  # 8 byte
     symbol: str  # 8 bytes
@@ -393,6 +466,66 @@ class AuctionInformation(Message):
     upper_auction_collar_price_int: int  # 8 bytes
 
 
+@dataclass
+class BidUpdate(Message):
+    """
+    From the DEEP specification document
+    """
+
+    __slots__ = (
+        "flags",
+        "timestamp",
+        "symbol",
+        "size",
+        "price_int",
+        "price",
+    )
+    flags: int  # 1 byte
+    timestamp: int  # 8 bytes
+    symbol: str  # 8 bytes
+    size: int  # 4 bytes 
+    price_int: int  # 8 bytes     
+
+
+@dataclass
+class AskUpdate(Message):
+    """
+    From the DEEP specification document
+    """
+    
+    __slots__ = (
+        "flags",
+        "timestamp",
+        "symbol",
+        "size",
+        "price_int",
+        "price",
+    )
+    flags: int  # 1 byte
+    timestamp: int  # 8 bytes
+    symbol: str  # 8 bytes
+    size: int  # 4 bytes 
+    price_int: int  # 8 bytes 
+
+
+
+
+@dataclass
+class SecurityEvent(Message):
+    """
+    From the DEEPS 
+    """
+
+    __slots__ = ("security_event", "timestamp","symbol", "security_event_str",)
+    security_event: str  # 1 byte
+    timestamp: int  # 8 bytes
+    symbol: str  # 8 bytes
+
+
+    def __post_init__(self):
+        Message.__post_init__(self)
+        self.security_event_str = security_event_types[self.security_event]
+
 AllMessages = Union[
     ShortSalePriceSale,
     TradeBreak,
@@ -404,4 +537,7 @@ AllMessages = Union[
     TradingStatus,
     OperationalHalt,
     QuoteUpdate,
+    BidUpdate,
+    AskUpdate,
+    SecurityEvent,
 ]

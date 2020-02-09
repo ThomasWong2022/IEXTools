@@ -24,8 +24,8 @@ class DataDownloader(object):
         """
         self.base_endpoint = "https://api.iextrading.com/1.0/"
 
-        if sys.argv[0]:
-            os.chdir(os.path.dirname(sys.argv[0]))
+        #if sys.argv[0]:
+            #os.chdir(os.path.dirname(sys.argv[0]))
 
         self.directory = "IEX_data"
         if not os.path.exists(self.directory):
@@ -106,17 +106,23 @@ class DataDownloader(object):
         link_info = self._get_download_link(date)
         url = link_info[feed_type]["url"]
         filename = link_info[feed_type]["file"]
-        response = requests.get(url, stream=True)
-        try:
-            response.raise_for_status()
-        except requests.RequestException as e:
-            raise IEXHISTExceptions.RequestsException(e.args)
 
+        # Check if file exist, do not download if already exist
         file_in = os.path.join(self.directory, filename)
-        with open(file_in, "wb") as data_file:
-            for chunk in response.iter_content(chunk_size=1024):
-                if chunk:
-                    data_file.write(chunk)
+
+        if not os.path.isfile(file_in):
+            print('Start to download ',file_in)
+            response = requests.get(url, stream=True)
+            try:
+                response.raise_for_status()
+            except requests.RequestException as e:
+                raise IEXHISTExceptions.RequestsException(e.args)
+
+            file_in = os.path.join(self.directory, filename)
+            with open(file_in, "wb") as data_file:
+                for chunk in response.iter_content(chunk_size=1024):
+                    if chunk:
+                        data_file.write(chunk)
 
         return filename
 

@@ -33,7 +33,12 @@ Beginning test - 1,000,000 messages - only TradeReport and QuoteUpdate
 messages, not printing
 Parsed 1,000,000 messages in 54.0 seconds -- 18512.9 messages per second
 '''
+
+Thomas: self.unknown attributed added in get next message method for handling trailing bits of
+additional info when there is protocol changes 
 """
+
+
 from __future__ import annotations
 import struct
 from datetime import datetime, timezone
@@ -41,6 +46,7 @@ from . import messages
 from typing import BinaryIO, Optional, Iterator, Union, List, Tuple, Dict
 from .IEXHISTExceptions import ProtocolException
 from .messages import AllMessages
+
 
 
 class Parser(object):
@@ -63,10 +69,14 @@ class Parser(object):
         self.version = b"\x01"
         self.reserved = b"\x00"
         if tops and not deep:
-            self.protocol_id = b"\x03\x80"
+            if 'TOPS1.5' in file_path:
+                self.protocol_id = b"\x02\x80"
+            else:
+                self.protocol_od = b"\x03\x80"
         elif deep:
             self.protocol_id = b"\x04\x80"
-            raise NotImplementedError("Parsing of DEEP files not implemented")
+            # print('Deep')
+            # raise NotImplementedError("Parsing of DEEP files not implemented")
         elif deep and tops:
             raise ValueError('"deep" and "tops" arguments cannot both be true')
         self.channel_id = b"\x01\x00\x00\x00"
@@ -92,6 +102,9 @@ class Parser(object):
             messages.TradingStatus: b"\x48",
             messages.OperationalHalt: b"\x4f",
             messages.QuoteUpdate: b"\x51",
+            messages.BidUpdate: b"\x38",
+            messages.AskUpdate: b"\x35",
+            messages.SecurityEvent: b"\x45",
         }
 
         self.decoder = messages.MessageDecoder()
@@ -262,7 +275,7 @@ class Parser(object):
 
             self._read_next_message()
 
-        self.message = self.decoder.decode_message(
+        self.message,self.unknown = self.decoder.decode_message(
             self.message_type, self.message_binary
         )
         return self.message
